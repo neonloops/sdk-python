@@ -28,7 +28,8 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://neonloops.com"
-Repository = "https://github.com/enderyildirim/neonloops"
+Repository = "https://github.com/neonloops/sdk-python"
+Issues = "https://github.com/neonloops/sdk-python/issues"
 
 [project.optional-dependencies]
 dev = [
