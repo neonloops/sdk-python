@@ -11,6 +11,27 @@ from neonloops.types import RunInput, RunResult, StreamEventUnion, parse_stream_
 _DEFAULT_BASE_URL = "https://neonloops.com"
 
 
+class ApprovalOptions:
+    """Options for approving or rejecting a workflow run."""
+
+    def __init__(self, comment: Optional[str] = None) -> None:
+        self.comment = comment
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {}
+        if self.comment is not None:
+            d["comment"] = self.comment
+        return d
+
+
+class SessionListResponse:
+    """Paginated response from list_sessions."""
+
+    def __init__(self, data: List[Session], pagination: Dict[str, Any]) -> None:
+        self.data = data
+        self.pagination = pagination
+
+
 class Runner:
     """Execute Neonloops workflows via the API.
 
@@ -141,13 +162,13 @@ class Runner:
     async def approve(
         self,
         run_id: str,
-        comment: Optional[str] = None,
+        options: Optional[ApprovalOptions] = None,
     ) -> RunResult:
         """Approve a paused workflow run (pending_approval status).
 
         Args:
             run_id: The run ID (e.g. "run_abc123").
-            comment: Optional comment.
+            options: Optional ApprovalOptions (e.g. with a comment).
 
         Returns:
             RunResult with the resumed run's output.
@@ -155,9 +176,7 @@ class Runner:
         if not run_id:
             raise ValueError("run_id is required")
 
-        body: Dict[str, Any] = {}
-        if comment:
-            body["comment"] = comment
+        body = options.to_dict() if options is not None else {}
 
         data = await self._client.post(f"/api/v1/run/{run_id}/approve", body)
         return RunResult(**data)
@@ -165,15 +184,13 @@ class Runner:
     def approve_sync(
         self,
         run_id: str,
-        comment: Optional[str] = None,
+        options: Optional[ApprovalOptions] = None,
     ) -> RunResult:
         """Approve a paused workflow run synchronously."""
         if not run_id:
             raise ValueError("run_id is required")
 
-        body: Dict[str, Any] = {}
-        if comment:
-            body["comment"] = comment
+        body = options.to_dict() if options is not None else {}
 
         data = self._client.post_sync(f"/api/v1/run/{run_id}/approve", body)
         return RunResult(**data)
@@ -181,13 +198,13 @@ class Runner:
     async def reject(
         self,
         run_id: str,
-        comment: Optional[str] = None,
+        options: Optional[ApprovalOptions] = None,
     ) -> RunResult:
         """Reject a paused workflow run (pending_approval status).
 
         Args:
             run_id: The run ID (e.g. "run_abc123").
-            comment: Optional comment.
+            options: Optional ApprovalOptions (e.g. with a comment).
 
         Returns:
             RunResult with the rejected run's output.
@@ -195,9 +212,7 @@ class Runner:
         if not run_id:
             raise ValueError("run_id is required")
 
-        body: Dict[str, Any] = {}
-        if comment:
-            body["comment"] = comment
+        body = options.to_dict() if options is not None else {}
 
         data = await self._client.post(f"/api/v1/run/{run_id}/reject", body)
         return RunResult(**data)
@@ -205,15 +220,13 @@ class Runner:
     def reject_sync(
         self,
         run_id: str,
-        comment: Optional[str] = None,
+        options: Optional[ApprovalOptions] = None,
     ) -> RunResult:
         """Reject a paused workflow run synchronously."""
         if not run_id:
             raise ValueError("run_id is required")
 
-        body: Dict[str, Any] = {}
-        if comment:
-            body["comment"] = comment
+        body = options.to_dict() if options is not None else {}
 
         data = self._client.post_sync(f"/api/v1/run/{run_id}/reject", body)
         return RunResult(**data)
@@ -250,26 +263,61 @@ class Runner:
         data = self._client.post_sync("/api/v1/sessions", body)
         return Session(**data)
 
-    async def list_sessions(self, workflow_id: str) -> List[Session]:
+    async def list_sessions(
+        self,
+        workflow_id: str,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> SessionListResponse:
         """List chat sessions for a workflow.
 
         Args:
             workflow_id: The workflow ID.
+            limit: Maximum number of sessions to return.
+            offset: Number of sessions to skip.
 
         Returns:
-            List of sessions (newest first).
+            SessionListResponse with data (list of sessions) and pagination metadata.
         """
-        res = await self._client.get(
-            "/api/v1/sessions", params={"workflow_id": workflow_id}
-        )
-        return [Session(**s) for s in res["data"]]
+        params: Dict[str, Any] = {"workflow_id": workflow_id}
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
 
-    def list_sessions_sync(self, workflow_id: str) -> List[Session]:
-        """List chat sessions synchronously."""
-        res = self._client.get_sync(
-            "/api/v1/sessions", params={"workflow_id": workflow_id}
+        res = await self._client.get("/api/v1/sessions", params=params)
+        return SessionListResponse(
+            data=[Session(**s) for s in res["data"]],
+            pagination=res["pagination"],
         )
-        return [Session(**s) for s in res["data"]]
+
+    def list_sessions_sync(
+        self,
+        workflow_id: str,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> SessionListResponse:
+        """List chat sessions synchronously.
+
+        Args:
+            workflow_id: The workflow ID.
+            limit: Maximum number of sessions to return.
+            offset: Number of sessions to skip.
+
+        Returns:
+            SessionListResponse with data (list of sessions) and pagination metadata.
+        """
+        params: Dict[str, Any] = {"workflow_id": workflow_id}
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
+
+        res = self._client.get_sync("/api/v1/sessions", params=params)
+        return SessionListResponse(
+            data=[Session(**s) for s in res["data"]],
+            pagination=res["pagination"],
+        )
 
     async def get_session_messages(self, session_id: str) -> List[SessionMessage]:
         """Get messages for a chat session.
