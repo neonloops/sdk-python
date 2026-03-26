@@ -718,3 +718,61 @@ class TestStreamErrorBodyFallback:
 
         assert exc_info.value.status == 502
         assert exc_info.value.body == "Bad Gateway"
+
+
+# --------------------------------------------------------------------------- #
+#  NeonloopsTimeoutError re-raise through retry exception chain (L102, L170)
+# --------------------------------------------------------------------------- #
+
+class TestTimeoutErrorReRaise:
+    @pytest.mark.asyncio
+    async def test_async_timeout_error_re_raised_directly(self):
+        """L101-102: NeonloopsTimeoutError raised inside try block re-raises."""
+        client = NeonloopsClient(api_key=API_KEY, base_url=BASE_URL, max_retries=0)
+
+        mock_http = AsyncMock()
+        mock_http.request = AsyncMock(side_effect=NeonloopsTimeoutError(5.0))
+        mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+        mock_http.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("neonloops.client.httpx.AsyncClient", return_value=mock_http):
+            with pytest.raises(NeonloopsTimeoutError) as exc_info:
+                await client.post("/api/v1/run", {})
+
+        assert exc_info.value.timeout_s == 5.0
+
+    def test_sync_timeout_error_re_raised_directly(self):
+        """L169-170: sync NeonloopsTimeoutError raised inside try block re-raises."""
+        client = NeonloopsClient(api_key=API_KEY, base_url=BASE_URL, max_retries=0)
+
+        mock_http = MagicMock()
+        mock_http.request = MagicMock(side_effect=NeonloopsTimeoutError(10.0))
+        mock_http.__enter__ = MagicMock(return_value=mock_http)
+        mock_http.__exit__ = MagicMock(return_value=False)
+
+        with patch("neonloops.client.httpx.Client", return_value=mock_http):
+            with pytest.raises(NeonloopsTimeoutError) as exc_info:
+                client.post_sync("/api/v1/run", {})
+
+        assert exc_info.value.timeout_s == 10.0
+
+
+# --------------------------------------------------------------------------- #
+#  Fallback raise after retry loop exhausted (L108, L176)
+# --------------------------------------------------------------------------- #
+
+class TestFallbackRaiseAfterLoop:
+    @pytest.mark.asyncio
+    async def test_async_raises_runtime_error_on_empty_loop(self):
+        """L108: raise last_error or RuntimeError when loop body never executes."""
+        client = NeonloopsClient(api_key=API_KEY, base_url=BASE_URL, max_retries=-1)
+
+        with pytest.raises(RuntimeError, match="Request failed"):
+            await client.post("/api/v1/run", {})
+
+    def test_sync_raises_runtime_error_on_empty_loop(self):
+        """L176: sync raise last_error or RuntimeError when loop body never executes."""
+        client = NeonloopsClient(api_key=API_KEY, base_url=BASE_URL, max_retries=-1)
+
+        with pytest.raises(RuntimeError, match="Request failed"):
+            client.post_sync("/api/v1/run", {})

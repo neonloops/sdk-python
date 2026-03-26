@@ -98,6 +98,21 @@ PUBLISH_RESULT_DICT: Dict[str, Any] = {
     "status": "published",
 }
 
+VERSION_DETAIL_DICT: Dict[str, Any] = {
+    "id": "ver_001",
+    "workflow_id": "wf_abc123",
+    "version": 3,
+    "published_at": "2025-03-01T00:00:00Z",
+    "nodes": [{"id": "n1", "type": "prompt"}],
+    "edges": [{"id": "e1", "source": "n1", "target": "n2"}],
+}
+
+ROLLBACK_RESULT_DICT: Dict[str, Any] = {
+    "version": 2,
+    "status": "published",
+    "rolled_back_from": 4,
+}
+
 SESSION_DICT: Dict[str, Any] = {
     "id": "sess_abc123",
     "workflow_id": "wf_abc123",

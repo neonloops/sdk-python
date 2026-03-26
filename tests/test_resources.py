@@ -18,7 +18,9 @@ from neonloops.types import (
     WorkflowRun,
     WorkflowRunDetail,
     WorkflowVersion,
+    WorkflowVersionDetail,
     PublishResult,
+    RollbackResult,
     Project,
     Secret,
 )
@@ -29,7 +31,9 @@ from tests.conftest import (
     WORKFLOW_RUN_DICT,
     WORKFLOW_RUN_DETAIL_DICT,
     VERSION_DICT,
+    VERSION_DETAIL_DICT,
     PUBLISH_RESULT_DICT,
+    ROLLBACK_RESULT_DICT,
     PROJECT_DICT,
     SECRET_DICT,
 )
@@ -143,7 +147,7 @@ class TestWorkflowsCreate:
         call_body = mock_client.post.call_args[0][1]
         assert call_body["name"] == "Test Workflow"
         assert call_body["description"] == "A test workflow"
-        assert call_body["projectId"] == "proj_001"
+        assert call_body["project_id"] == "proj_001"
 
     def test_create_sync(self, mock_client):
         mock_client.post_sync = MagicMock(return_value=WORKFLOW_DETAIL_DICT)
@@ -181,7 +185,7 @@ class TestWorkflowsCreate:
         body = mock_client.post_sync.call_args[0][1]
         assert body["name"] == "WF"
         assert body["description"] == "Desc"
-        assert body["projectId"] == "p1"
+        assert body["project_id"] == "p1"
         assert body["nodes"] == [{"id": "n1"}]
         assert body["edges"] == [{"id": "e1"}]
 
@@ -699,3 +703,71 @@ class TestSecretsSubResource:
     def test_projects_has_secrets(self, mock_client):
         res = ProjectsResource(mock_client)
         assert isinstance(res.secrets, ProjectSecretsResource)
+
+
+# --------------------------------------------------------------------------- #
+#  WorkflowsResource — get_version / rollback
+# --------------------------------------------------------------------------- #
+
+class TestWorkflowsGetVersion:
+    @pytest.mark.asyncio
+    async def test_get_version_async(self, mock_client):
+        mock_client.get = AsyncMock(return_value=VERSION_DETAIL_DICT)
+        res = WorkflowsResource(mock_client)
+
+        v = await res.get_version("wf_abc123", 3)
+
+        assert isinstance(v, WorkflowVersionDetail)
+        assert v.id == "ver_001"
+        assert v.workflow_id == "wf_abc123"
+        assert v.version == 3
+        assert v.nodes == [{"id": "n1", "type": "prompt"}]
+        assert v.edges == [{"id": "e1", "source": "n1", "target": "n2"}]
+        mock_client.get.assert_called_once_with(
+            "/api/v1/workflows/wf_abc123/versions/3"
+        )
+
+    def test_get_version_sync(self, mock_client):
+        mock_client.get_sync = MagicMock(return_value=VERSION_DETAIL_DICT)
+        res = WorkflowsResource(mock_client)
+
+        v = res.get_version_sync("wf_abc123", 3)
+
+        assert isinstance(v, WorkflowVersionDetail)
+        assert v.id == "ver_001"
+        assert v.version == 3
+        mock_client.get_sync.assert_called_once_with(
+            "/api/v1/workflows/wf_abc123/versions/3"
+        )
+
+
+class TestWorkflowsRollback:
+    @pytest.mark.asyncio
+    async def test_rollback_async(self, mock_client):
+        mock_client.post = AsyncMock(return_value=ROLLBACK_RESULT_DICT)
+        res = WorkflowsResource(mock_client)
+
+        result = await res.rollback("wf_abc123", 2)
+
+        assert isinstance(result, RollbackResult)
+        assert result.version == 2
+        assert result.status == "published"
+        assert result.rolled_back_from == 4
+        mock_client.post.assert_called_once_with(
+            "/api/v1/workflows/wf_abc123/rollback",
+            {"version": 2},
+        )
+
+    def test_rollback_sync(self, mock_client):
+        mock_client.post_sync = MagicMock(return_value=ROLLBACK_RESULT_DICT)
+        res = WorkflowsResource(mock_client)
+
+        result = res.rollback_sync("wf_abc123", 2)
+
+        assert isinstance(result, RollbackResult)
+        assert result.version == 2
+        assert result.rolled_back_from == 4
+        mock_client.post_sync.assert_called_once_with(
+            "/api/v1/workflows/wf_abc123/rollback",
+            {"version": 2},
+        )

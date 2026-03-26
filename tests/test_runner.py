@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from neonloops.runner import Runner
+from neonloops.runner import Runner, ApprovalOptions
 from neonloops.types import RunInput, RunResult, RunStartEvent, RunCompleteEvent, Session, SessionMessage
 from neonloops.resources import WorkflowsResource, ProjectsResource
 
@@ -273,7 +273,7 @@ class TestApproveAsync:
         r = Runner(api_key="nl_sk_test")
         r._client.post = AsyncMock(return_value=RUN_RESULT_DICT)
 
-        await r.approve(run_id="run_1", comment="Looks good")
+        await r.approve(run_id="run_1", options=ApprovalOptions(comment="Looks good"))
 
         call_body = r._client.post.call_args[0][1]
         assert call_body == {"comment": "Looks good"}
@@ -306,7 +306,7 @@ class TestApproveSync:
         r = Runner(api_key="nl_sk_test")
         r._client.post_sync = MagicMock(return_value=RUN_RESULT_DICT)
 
-        r.approve_sync(run_id="run_1", comment="LGTM")
+        r.approve_sync(run_id="run_1", options=ApprovalOptions(comment="LGTM"))
 
         call_body = r._client.post_sync.call_args[0][1]
         assert call_body == {"comment": "LGTM"}
@@ -338,7 +338,7 @@ class TestRejectAsync:
         r = Runner(api_key="nl_sk_test")
         r._client.post = AsyncMock(return_value=RUN_RESULT_DICT)
 
-        await r.reject(run_id="run_1", comment="Not safe")
+        await r.reject(run_id="run_1", options=ApprovalOptions(comment="Not safe"))
 
         call_body = r._client.post.call_args[0][1]
         assert call_body == {"comment": "Not safe"}
@@ -370,7 +370,7 @@ class TestRejectSync:
         r = Runner(api_key="nl_sk_test")
         r._client.post_sync = MagicMock(return_value=RUN_RESULT_DICT)
 
-        r.reject_sync(run_id="run_1", comment="Nope")
+        r.reject_sync(run_id="run_1", options=ApprovalOptions(comment="Nope"))
 
         call_body = r._client.post_sync.call_args[0][1]
         assert call_body == {"comment": "Nope"}
@@ -486,10 +486,10 @@ class TestListSessionsAsync:
 
         sessions = await r.list_sessions(workflow_id="wf_abc123")
 
-        assert len(sessions) == 2
-        assert all(isinstance(s, Session) for s in sessions)
-        assert sessions[0].id == "sess_abc123"
-        assert sessions[1].id == "sess_def456"
+        assert len(sessions.data) == 2
+        assert all(isinstance(s, Session) for s in sessions.data)
+        assert sessions.data[0].id == "sess_abc123"
+        assert sessions.data[1].id == "sess_def456"
         r._client.get.assert_called_once_with(
             "/api/v1/sessions", params={"workflow_id": "wf_abc123"}
         )
@@ -504,7 +504,7 @@ class TestListSessionsAsync:
 
         sessions = await r.list_sessions(workflow_id="wf_empty")
 
-        assert sessions == []
+        assert sessions.data == []
 
 
 # --------------------------------------------------------------------------- #
@@ -521,8 +521,8 @@ class TestListSessionsSync:
 
         sessions = r.list_sessions_sync(workflow_id="wf_abc123")
 
-        assert len(sessions) == 1
-        assert sessions[0].id == "sess_abc123"
+        assert len(sessions.data) == 1
+        assert sessions.data[0].id == "sess_abc123"
         r._client.get_sync.assert_called_once_with(
             "/api/v1/sessions", params={"workflow_id": "wf_abc123"}
         )
@@ -601,3 +601,74 @@ class TestGetSessionMessagesSync:
         r._client.get_sync.assert_called_once_with(
             "/api/v1/sessions/sess_abc123/messages"
         )
+
+
+# --------------------------------------------------------------------------- #
+#  list_sessions() with limit and offset params (L284, L286)
+# --------------------------------------------------------------------------- #
+
+class TestListSessionsWithPagination:
+    @pytest.mark.asyncio
+    async def test_async_with_limit_and_offset(self):
+        """L284, L286: list_sessions passes limit and offset params."""
+        r = Runner(api_key="nl_sk_test")
+        r._client.get = AsyncMock(return_value={
+            "data": [SESSION_DICT],
+            "pagination": {"total": 1, "limit": 10, "offset": 5, "has_more": False},
+        })
+
+        sessions = await r.list_sessions(
+            workflow_id="wf_abc123", limit=10, offset=5
+        )
+
+        assert len(sessions.data) == 1
+        r._client.get.assert_called_once_with(
+            "/api/v1/sessions",
+            params={"workflow_id": "wf_abc123", "limit": 10, "offset": 5},
+        )
+
+
+# --------------------------------------------------------------------------- #
+#  list_sessions_sync() with limit and offset params (L312, L314)
+# --------------------------------------------------------------------------- #
+
+class TestListSessionsSyncWithPagination:
+    def test_sync_with_limit_and_offset(self):
+        """L312, L314: list_sessions_sync passes limit and offset params."""
+        r = Runner(api_key="nl_sk_test")
+        r._client.get_sync = MagicMock(return_value={
+            "data": [SESSION_DICT],
+            "pagination": {"total": 1, "limit": 10, "offset": 5, "has_more": False},
+        })
+
+        sessions = r.list_sessions_sync(
+            workflow_id="wf_abc123", limit=10, offset=5
+        )
+
+        assert len(sessions.data) == 1
+        r._client.get_sync.assert_called_once_with(
+            "/api/v1/sessions",
+            params={"workflow_id": "wf_abc123", "limit": 10, "offset": 5},
+        )
+
+
+# --------------------------------------------------------------------------- #
+#  _build_body() with version parameter (L362)
+# --------------------------------------------------------------------------- #
+
+class TestBuildBodyWithVersion:
+    def test_with_version(self):
+        """L362: _build_body includes version when provided."""
+        r = Runner(api_key="nl_sk_test")
+        body = r._build_body(
+            "wf_1",
+            [RunInput(role="user", content="hi")],
+            None,
+            None,
+            version=3,
+        )
+        assert body == {
+            "workflow_id": "wf_1",
+            "input": [{"role": "user", "content": "hi"}],
+            "version": 3,
+        }
