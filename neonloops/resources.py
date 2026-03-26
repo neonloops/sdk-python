@@ -134,7 +134,7 @@ class WorkflowsResource:
         if description is not None:
             body["description"] = description
         if project_id is not None:
-            body["projectId"] = project_id
+            body["project_id"] = project_id
         if nodes is not None:
             body["nodes"] = nodes
         if edges is not None:
@@ -156,7 +156,7 @@ class WorkflowsResource:
         if description is not None:
             body["description"] = description
         if project_id is not None:
-            body["projectId"] = project_id
+            body["project_id"] = project_id
         if nodes is not None:
             body["nodes"] = nodes
         if edges is not None:
